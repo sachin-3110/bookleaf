@@ -1,0 +1,1214 @@
+openapi: 3.1.0
+
+info:
+  title: BookLeaf — Author Support Portal API
+  version: 1.0.0
+  summary: REST API for author support tickets, book/royalty data and AI-assisted triage.
+  description: |
+    BookLeaf's author support portal exposes a small, resource-oriented REST API.
+
+    ### Conventions
+    - **Auth** is a JWT held in an **httpOnly cookie** (`bookleaf_session`), set by
+      `POST /api/auth/login`. There is no bearer token to paste — browsers send the
+      cookie automatically. Because of that, every request from Swagger UI must be
+      made from a browser that has signed in at `/login`.
+    - **Namespacing encodes scope:** `/api/me/*` = the signed-in author's own data,
+      `/api/admin/*` = admin-only, `/api/auth/*` = public.
+    - **Success envelope:** `{ "data": <payload>, "meta"?: { ... } }`
+    - **Error envelope:** `{ "error": { "code", "message", "details"? } }`
+    - **Pagination:** `?page=1&limit=20` (defaults 1 / 20, max 100); `meta.total` is returned.
+    - **Money** is integer Indian rupees. **Timestamps** are ISO-8601 UTC.
+    - **`ticketId`** (e.g. `TK-1001`) is the public identifier used in URLs; the internal
+      Mongo `id` is never used as a path segment.
+    - A ticket that exists but is not visible to the caller returns **404**, never 403,
+      so the API does not leak the existence of other authors' tickets.
+  contact:
+    name: BookLeaf Engineering
+    url: https://bookleafpublishing.com
+  license:
+    name: Unlicensed — assignment submission
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+  - url: https://bookleaf-portal.vercel.app
+    description: Production
+
+tags:
+  - name: Auth
+    description: Session lifecycle. Public endpoints plus "who am I".
+  - name: Author
+    description: 'Endpoints scoped to the signed-in author (role: author).'
+  - name: Admin
+    description: 'Support console endpoints (role: admin).'
+  - name: System
+    description: Non-authenticated service endpoints.
+
+security:
+  - cookieAuth: []
+
+paths:
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Sign in and receive a session cookie
+      description: |
+        Verifies credentials and sets the `bookleaf_session` httpOnly cookie.
+        Failures are deliberately generic (`INVALID_CREDENTIALS`) so the endpoint
+        cannot be used to enumerate which emails exist. Rate limited per
+        IP + email; the count is returned in `Retry-After` when throttled.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: priya.sharma@email.com
+              password: bookleaf123
+      responses:
+        '200':
+          description: 'Signed in, with `Set-Cookie: bookleaf_session=…; HttpOnly; SameSite=Lax`.'
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: The session cookie.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionUserResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Sign out
+      description: |
+        Idempotent: it always clears the cookie and returns `200`, so a client
+        holding an already-expired session can still sign out cleanly.
+      responses:
+        '200':
+          description: Cookie cleared.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: The current session's user
+      description: |
+        The token proves who signed in; the database confirms the account still
+        exists (for example after a re-seed), so a stale cookie cannot impersonate
+        a deleted user.
+      responses:
+        '200':
+          description: The authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionUserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/me/books:
+    get:
+      tags: [Author]
+      summary: The author's books and royalty totals
+      description: |
+        Returns every book registered to the author plus dashboard totals.
+        Totals are computed **on read** from the returned books (never stored) and
+        count **published titles only** — an in-production book has no earnings yet,
+        and presenting a projected figure next to a real one would be misleading.
+        In-production books therefore keep `null` for MRP/publication date and `0`
+        for royalties.
+      responses:
+        '200':
+          description: Books, newest publication first; in-production titles last.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [books, totals]
+                    properties:
+                      books:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Book'
+                      totals:
+                        $ref: '#/components/schemas/RoyaltyTotals'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/me/tickets:
+    get:
+      tags: [Author]
+      summary: List the author's tickets
+      description: |
+        Newest activity first. Messages returned here are **public only** — internal
+        notes are never exposed on any `/api/me/*` route.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          required: false
+          description: Filter by lifecycle status. Omit for all.
+          schema:
+            $ref: '#/components/schemas/TicketStatus'
+      responses:
+        '200':
+          description: A page of tickets.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedMeta'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Ticket'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Author]
+      summary: Create a ticket
+      description: |
+        The author supplies only a book (optional), subject and description;
+        **category and priority are assigned by the API**, not chosen by the client.
+
+        Classification runs through the AI provider when one is configured and
+        degrades to a deterministic keyword/heuristic engine when it is not — this
+        service is designed so that it cannot fail the request. `categorySource`
+        and `prioritySource` tell you which path produced them (`ai` or `rule`).
+
+        `book_id` must be `null` or a book owned by the caller; a book belonging to
+        another author is rejected with **400**.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTicketRequest'
+            example:
+              book_id: BK001
+              subject: Royalty for June looks short
+              description: >-
+                My June statement shows 12 fewer copies than the dashboard. Can you
+                reconcile this against the Amazon India report?
+              attachments:
+                - name: june-statement.png
+                  size: 20480
+                  type: image/png
+      responses:
+        '201':
+          description: Ticket created and classified.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      ticket:
+                        $ref: '#/components/schemas/Ticket'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/me/tickets/{id}:
+    get:
+      tags: [Author]
+      summary: One of the author's tickets
+      description: Scoped to the caller. A ticket belonging to another author is **404**.
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      responses:
+        '200':
+          description: The ticket.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      ticket:
+                        $ref: '#/components/schemas/Ticket'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/me/tickets/{id}/messages:
+    post:
+      tags: [Author]
+      summary: Add a follow-up message
+      description: |
+        Appends a **public** message and bumps `lastActivityAt`.
+
+        If the ticket was `Resolved` or `Closed`, sending a message **reopens** it
+        (status becomes `Open`) and records an explicit `reopened` audit event
+        rather than silently flipping the status.
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorMessageRequest'
+      responses:
+        '201':
+          description: Message appended. Returns the updated ticket.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      ticket:
+                        $ref: '#/components/schemas/Ticket'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/admin/tickets:
+    get:
+      tags: [Admin]
+      summary: Support queue with filters and sorting
+      description: |
+        The queue. Filtering, sorting and pagination all happen in MongoDB via a
+        single aggregation — the API never loads the collection into memory to sort it.
+
+        **`sort=urgency` (the default)** ranks by *status first, then priority, then age*:
+        unresolved work outranks resolved work, then `Critical` above `High` above
+        `Medium` above `Low`, then oldest first. In other words the top of the queue is
+        always "the most urgent thing that has been waiting longest", without anyone
+        having to scan the list.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/TicketStatus'
+        - name: category
+          in: query
+          schema:
+            $ref: '#/components/schemas/TicketCategory'
+        - name: priority
+          in: query
+          schema:
+            $ref: '#/components/schemas/TicketPriority'
+        - name: assignedTo
+          in: query
+          description: >
+            `me` = assigned to the caller, `unassigned` (or `none`) = no assignee,
+            otherwise a user id.
+          schema:
+            type: string
+        - name: from
+          in: query
+          description: Inclusive lower bound on `createdAt` (ISO date).
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          description: Inclusive upper bound on `createdAt` (ISO date).
+          schema:
+            type: string
+            format: date
+        - name: q
+          in: query
+          description: Case-insensitive search across subject, description and ticket id.
+          schema:
+            type: string
+            maxLength: 200
+        - name: sort
+          in: query
+          description: Defaults to `urgency`.
+          schema:
+            $ref: '#/components/schemas/TicketSort'
+      responses:
+        '200':
+          description: A page of tickets, internal notes included.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedMeta'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Ticket'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/admin/tickets/{id}:
+    get:
+      tags: [Admin]
+      summary: Ticket detail (with lazy AI draft)
+      description: |
+        Returns the full ticket: every message **including internal notes**, the
+        audit `events` trail, and `aiDraft`.
+
+        The draft is generated **lazily** — the first time an admin opens a ticket,
+        if no cached draft exists, one is produced and stored on the ticket. This is
+        a deliberate cost decision: a draft is only worth paying for on a ticket
+        somebody is actually working, so a queue of 2000 untouched tickets costs zero
+        model calls. When generation happened on this request the response `meta`
+        carries `draftGenerated: true`.
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      responses:
+        '200':
+          description: The ticket.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - type: object
+                    properties:
+                      meta:
+                        type: object
+                        properties:
+                          draftGenerated:
+                            type: boolean
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          ticket:
+                            $ref: '#/components/schemas/Ticket'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Admin]
+      summary: Update status, category, priority or assignment
+      description: |
+        Partial update; at least one field is required.
+
+        - Overriding `category` or `priority` sets the corresponding `*Source` to
+          `admin` and **preserves `aiOriginal`**, so the UI can always show
+          "automation said X, the human chose Y". An override is never overwritten
+          by a later re-classification.
+        - Every change appends an entry to the ticket's `events` audit trail.
+        - **`Closed` is terminal.** Any transition out of `Closed` requires an
+          explicit `"reopen": true`, otherwise the API answers **409**.
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTicketRequest'
+            examples:
+              triage:
+                summary: Triage and take ownership
+                value:
+                  status: In Progress
+                  priority: Critical
+                  category: Printing & Quality
+                  assignSelf: true
+              reopen:
+                summary: Reopen a closed ticket
+                value:
+                  status: Open
+                  reopen: true
+      responses:
+        '200':
+          description: Updated ticket.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      ticket:
+                        $ref: '#/components/schemas/Ticket'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/admin/tickets/{id}/messages:
+    post:
+      tags: [Admin]
+      summary: Reply to the author, or leave an internal note
+      description: |
+        `visibility: public` appends a `reply_sent` event and the message becomes
+        visible in the author portal on their next poll.
+        `visibility: internal` appends a `note_added` event and the message is
+        **filtered out of every `/api/me/*` response**.
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminMessageRequest'
+            examples:
+              reply:
+                value:
+                  body: >-
+                    Hi Priya, I've reconciled June against the Amazon India report —
+                    the 12 copies were a delayed settlement, paid out on 4 July.
+                  visibility: public
+              note:
+                value:
+                  body: Escalated to the royalty ops team; waiting on their reconciliation.
+                  visibility: internal
+      responses:
+        '201':
+          description: Message appended. Returns the updated ticket.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      ticket:
+                        $ref: '#/components/schemas/Ticket'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/admin/tickets/{id}/ai:
+    post:
+      tags: [Admin]
+      summary: (Re)run AI classification or regenerate the draft reply
+      description: |
+        `mode: draft` regenerates and caches the suggested reply, appending an
+        `ai_draft_regenerated` event.
+
+        `mode: classify` re-runs classification on the original text. It returns the
+        machine verdict in `classification` along with `applied`:
+        **`applied: false` means a human had already overridden the category or
+        priority and the new result was deliberately not written** — automation does
+        not get to overwrite a person's decision.
+
+        Rate limited per admin, and it degrades to the rule engine rather than
+        failing when the provider is unreachable.
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiRunRequest'
+      responses:
+        '200':
+          description: The result of the run.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    required: [ticket]
+                    properties:
+                      ticket:
+                        $ref: '#/components/schemas/Ticket'
+                      draft:
+                        $ref: '#/components/schemas/AiDraft'
+                      classification:
+                        $ref: '#/components/schemas/ClassificationSummary'
+                      applied:
+                        type: boolean
+                        description: 'Present for `mode: classify`. `false` when an admin override was preserved.'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/admin/stats:
+    get:
+      tags: [Admin]
+      summary: Queue counts for the overview dashboard
+      description: |
+        Counts are produced by parallel MongoDB `$group` aggregations, not by loading
+        documents and counting in JavaScript.
+      responses:
+        '200':
+          description: Aggregate counts.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      stats:
+                        $ref: '#/components/schemas/TicketStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /openapi.yaml:
+    get:
+      tags: [System]
+      summary: This document
+      description: The canonical OpenAPI specification, served statically.
+      security: []
+      responses:
+        '200':
+          description: The OpenAPI document.
+          content:
+            application/yaml:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: bookleaf_session
+      description: |
+        JWT session cookie set by `POST /api/auth/login`. httpOnly, so it is not
+        readable from JavaScript — which is precisely the point.
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: 1-based page number.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    Limit:
+      name: limit
+      in: query
+      description: Page size (max 100).
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    TicketId:
+      name: id
+      in: path
+      required: true
+      description: Public ticket identifier, e.g. `TK-1001`.
+      schema:
+        type: string
+        pattern: '^TK-\d+$'
+        example: TK-1001
+
+  responses:
+    ValidationError:
+      description: Request failed validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: VALIDATION_ERROR
+              message: Request validation failed.
+              details:
+                - path: subject
+                  message: Subject must be at least 3 characters.
+    Unauthorized:
+      description: Not authenticated, or credentials rejected.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: UNAUTHENTICATED
+              message: You must be signed in to do that.
+    Forbidden:
+      description: Authenticated, but not allowed to touch this resource.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: FORBIDDEN
+              message: This action requires an administrator account.
+    NotFound:
+      description: Not found — or not visible to this caller (deliberately indistinguishable).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: NOT_FOUND
+              message: That ticket was not found on your account.
+    Conflict:
+      description: The requested change conflicts with the current state.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: CONFLICT
+              message: >-
+                This ticket is closed. Send reopen true to reopen it before
+                changing its status.
+    RateLimited:
+      description: Too many requests. See `Retry-After`.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds until the next attempt is allowed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: RATE_LIMITED
+              message: Too many sign-in attempts. Try again in 42s.
+
+  schemas:
+    Role:
+      type: string
+      enum: [author, admin]
+
+    TicketStatus:
+      type: string
+      description: |
+        Lifecycle. `Closed` is terminal — moving out of it requires
+        `reopen: true` on `PATCH /api/admin/tickets/{id}`.
+      enum: [Open, In Progress, Resolved, Closed]
+
+    TicketCategory:
+      type: string
+      enum:
+        - Royalty & Payments
+        - ISBN & Metadata Issues
+        - Printing & Quality
+        - Distribution & Availability
+        - Book Status & Production Updates
+        - General Inquiry
+
+    TicketPriority:
+      type: string
+      enum: [Critical, High, Medium, Low]
+
+    TicketSort:
+      type: string
+      description: Defaults to `urgency`.
+      enum: [urgency, newest, oldest, updated]
+
+    ClassificationSource:
+      type: string
+      description: |
+        Where a category/priority value came from — `ai` (model),
+        `rule` (deterministic fallback), `admin` (human override) or
+        `default` (no signal at all).
+      enum: [ai, rule, admin, default]
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR
+                - UNAUTHENTICATED
+                - INVALID_CREDENTIALS
+                - FORBIDDEN
+                - NOT_FOUND
+                - CONFLICT
+                - RATE_LIMITED
+                - AI_UNAVAILABLE
+                - INTERNAL_ERROR
+            message:
+              type: string
+            details:
+              description: Optional field-level context (present on validation failures).
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+
+    SessionUser:
+      type: object
+      required: [id, role, name, email, authorId]
+      properties:
+        id:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        authorId:
+          type: [string, 'null']
+          description: Links the login to the `authors` collection. `null` for admins.
+
+    SessionUserResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/SessionUser'
+
+    OkResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            ok:
+              type: boolean
+
+    PaginatedMeta:
+      type: object
+      properties:
+        meta:
+          type: object
+          required: [page, limit, total]
+          properties:
+            page:
+              type: integer
+            limit:
+              type: integer
+            total:
+              type: integer
+
+    RoyaltyTotals:
+      type: object
+      description: Summed across **published** books only, computed on read.
+      required: [earned, paid, pending]
+      properties:
+        earned:
+          type: integer
+        paid:
+          type: integer
+        pending:
+          type: integer
+
+    Book:
+      type: object
+      required:
+        - book_id
+        - title
+        - status
+        - total_copies_sold
+        - total_royalty_earned
+        - royalty_paid
+        - royalty_pending
+        - available_on
+      properties:
+        book_id:
+          type: string
+          example: BK001
+        title:
+          type: string
+        isbn:
+          type: [string, 'null']
+          description: Null while the title is still in production.
+        genre:
+          type: [string, 'null']
+        publication_date:
+          type: [string, 'null']
+          format: date
+          description: Calendar date (`YYYY-MM-DD`). Null means not published yet.
+        status:
+          type: string
+          description: Free-text production status from the source data.
+          example: Published & Live
+        mrp:
+          type: [integer, 'null']
+        author_royalty_per_copy:
+          type: [integer, 'null']
+        total_copies_sold:
+          type: integer
+        total_royalty_earned:
+          type: integer
+        royalty_paid:
+          type: integer
+        royalty_pending:
+          type: integer
+        last_royalty_payout_date:
+          type: [string, 'null']
+          format: date
+        print_partner:
+          type: [string, 'null']
+        available_on:
+          type: array
+          description: Retail channels the title is listed on. Empty for in-production books.
+          items:
+            type: string
+
+    AttachmentMeta:
+      type: object
+      description: Metadata only — this build does not store binary uploads.
+      required: [name, size, type]
+      properties:
+        name:
+          type: string
+        size:
+          type: integer
+          minimum: 0
+        type:
+          type: string
+
+    Message:
+      type: object
+      required: [id, senderRole, senderName, body, visibility, createdAt]
+      properties:
+        id:
+          type: string
+        senderRole:
+          type: string
+          enum: [author, admin]
+        senderName:
+          type: string
+        body:
+          type: string
+        visibility:
+          type: string
+          enum: [public, internal]
+        createdAt:
+          type: string
+          format: date-time
+
+    TicketEvent:
+      type: object
+      description: One entry in the ticket's audit trail.
+      required: [id, type, actorRole, createdAt]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum:
+            - created
+            - classified
+            - status_changed
+            - category_overridden
+            - priority_overridden
+            - assigned
+            - reply_sent
+            - note_added
+            - reopened
+            - ai_draft_regenerated
+        actorRole:
+          type: string
+          enum: [author, admin, system]
+        actorId:
+          type: [string, 'null']
+        from:
+          type: [string, 'null']
+        to:
+          type: [string, 'null']
+        note:
+          type: [string, 'null']
+        createdAt:
+          type: string
+          format: date-time
+
+    AiDraft:
+      type: object
+      required: [body, model, generatedAt, fallback]
+      properties:
+        body:
+          type: string
+        model:
+          type: string
+          example: google/gemini-2.0-flash-exp:free
+        generatedAt:
+          type: string
+          format: date-time
+        fallback:
+          type: boolean
+          description: True when the deterministic template engine produced this, not a model.
+
+    ClassificationSummary:
+      type: object
+      required: [category, priority, source]
+      properties:
+        category:
+          $ref: '#/components/schemas/TicketCategory'
+        priority:
+          $ref: '#/components/schemas/TicketPriority'
+        confidence:
+          type: [number, 'null']
+          description: 0–1 when the model supplied one; null for the rule engine.
+        reason:
+          type: [string, 'null']
+        source:
+          $ref: '#/components/schemas/ClassificationSource'
+
+    Ticket:
+      type: object
+      required:
+        - id
+        - ticketId
+        - author_id
+        - subject
+        - description
+        - category
+        - priority
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: Internal Mongo id. **Not** used in URLs.
+        ticketId:
+          type: string
+          description: Public identifier used in URLs.
+          example: TK-1001
+        author_id:
+          type: string
+        authorName:
+          type: string
+        book_id:
+          type: [string, 'null']
+        bookTitle:
+          type: [string, 'null']
+        subject:
+          type: string
+        description:
+          type: string
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttachmentMeta'
+        category:
+          $ref: '#/components/schemas/TicketCategory'
+        categorySource:
+          $ref: '#/components/schemas/ClassificationSource'
+        categoryConfidence:
+          type: [number, 'null']
+        priority:
+          $ref: '#/components/schemas/TicketPriority'
+        prioritySource:
+          $ref: '#/components/schemas/ClassificationSource'
+        aiOriginal:
+          oneOf:
+            - type: 'null'
+            - type: object
+              description: >-
+                Snapshot of what automation originally decided, preserved the first
+                time a human overrides either field.
+              properties:
+                category:
+                  $ref: '#/components/schemas/TicketCategory'
+                priority:
+                  $ref: '#/components/schemas/TicketPriority'
+        status:
+          $ref: '#/components/schemas/TicketStatus'
+        assignedTo:
+          type: [string, 'null']
+        assignedToName:
+          type: [string, 'null']
+        aiDraft:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/AiDraft'
+          description: Always `null` on `/api/me/*` responses — the draft is an internal tool.
+        messages:
+          type: array
+          description: Public messages only on `/api/me/*`; internal notes included on `/api/admin/*`.
+          items:
+            $ref: '#/components/schemas/Message'
+        events:
+          type: array
+          description: Author-visible subset (`created`, `status_changed`, `reply_sent`, `reopened`) on `/api/me/*`; full trail on `/api/admin/*`.
+          items:
+            $ref: '#/components/schemas/TicketEvent'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        lastActivityAt:
+          type: string
+          format: date-time
+
+    CreateTicketRequest:
+      type: object
+      required: [subject, description]
+      properties:
+        book_id:
+          type: [string, 'null']
+          default: null
+          description: Must be null or a book owned by the caller.
+        subject:
+          type: string
+          minLength: 3
+          maxLength: 120
+        description:
+          type: string
+          minLength: 10
+          maxLength: 4000
+        attachments:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/AttachmentMeta'
+
+    AuthorMessageRequest:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 4000
+
+    AdminMessageRequest:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        visibility:
+          type: string
+          enum: [public, internal]
+          default: public
+
+    UpdateTicketRequest:
+      type: object
+      description: At least one field is required.
+      properties:
+        status:
+          $ref: '#/components/schemas/TicketStatus'
+        category:
+          $ref: '#/components/schemas/TicketCategory'
+        priority:
+          $ref: '#/components/schemas/TicketPriority'
+        assignSelf:
+          type: boolean
+          description: Assign the ticket to the calling admin.
+        assignedTo:
+          type: [string, 'null']
+          description: A user id, or `null` to unassign.
+        reopen:
+          type: boolean
+          description: Required to move a `Closed` ticket to any other status.
+
+    AiRunRequest:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [draft, classify]
+          default: draft
+
+    TicketStats:
+      type: object
+      required: [total, unassigned, byStatus, byCategory, byPriority]
+      properties:
+        total:
+          type: integer
+        unassigned:
+          type: integer
+        byStatus:
+          type: object
+          additionalProperties:
+            type: integer
+        byCategory:
+          type: object
+          additionalProperties:
+            type: integer
+        byPriority:
+          type: object
+          additionalProperties:
+            type: integer

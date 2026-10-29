@@ -1,0 +1,761 @@
+{
+  "info": {
+    "name": "BookLeaf — Author Support Portal",
+    "description": "Importable collection for the BookLeaf Author Support Portal API.\n\n## How to use\n1. Set the `baseUrl` collection variable (default `http://localhost:3000`).\n2. Run **Auth → Login** first. The session is an httpOnly cookie, so Postman stores it in its cookie jar automatically — there is no token to copy.\n3. Requests in **Author** and **Admin** need a session with the matching role:\n   - admin: `admin@bookleaf.test` / `bookleaf123`\n   - author: `priya.sharma@email.com` / `bookleaf123`\n\n**Create Ticket** writes the new `ticketId` into the `ticketId` collection variable, so the ticket-scoped requests work straight after it.\n\nThe full specification lives at `/openapi.yaml` and is rendered at `/api-docs`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "ticketId",
+      "value": "TK-1001",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK — signed in', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('response carries the user, never a password hash', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data.user).to.have.property('role');",
+                  "  pm.expect(JSON.stringify(json)).to.not.include('passwordHash');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@bookleaf.test\",\n  \"password\": \"bookleaf123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Signs in and sets the `bookleaf_session` httpOnly cookie. Swap the credentials for the author account to exercise the `/api/me/*` routes."
+          }
+        },
+        {
+          "name": "Me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('200 OK', function () { pm.response.to.have.status(200); });"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            },
+            "description": "Confirms the session is live and returns the caller's role."
+          }
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('200 OK', function () { pm.response.to.have.status(200); });"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "logout"]
+            },
+            "description": "Clears the session cookie. Idempotent."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Author (role: author)",
+      "item": [
+        {
+          "name": "My Books",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('totals are returned alongside books', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data).to.have.all.keys('books', 'totals');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/me/books",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "me", "books"]
+            },
+            "description": "Books plus royalty totals. Totals count published titles only."
+          }
+        },
+        {
+          "name": "My Tickets",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('paginated envelope', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.meta).to.include.keys('page', 'limit', 'total');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/me/tickets?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "me", "tickets"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "Open | In Progress | Resolved | Closed — leave blank for all",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "The author's tickets, newest activity first. Public messages only."
+          }
+        },
+        {
+          "name": "Create Ticket",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', function () { pm.response.to.have.status(201); });",
+                  "",
+                  "const json = pm.response.json();",
+                  "const ticket = json && json.data && json.data.ticket;",
+                  "",
+                  "if (ticket && ticket.ticketId) {",
+                  "  pm.collectionVariables.set('ticketId', ticket.ticketId);",
+                  "  console.log('Captured ticketId:', ticket.ticketId);",
+                  "}",
+                  "",
+                  "pm.test('the API assigned a category and a priority', function () {",
+                  "  pm.expect(ticket.category).to.be.a('string');",
+                  "  pm.expect(ticket.priority).to.be.a('string');",
+                  "  pm.expect(['ai', 'rule', 'default']).to.include(ticket.categorySource);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"book_id\": \"BK001\",\n  \"subject\": \"Royalty for June looks short\",\n  \"description\": \"My June statement shows 12 fewer copies than the dashboard. Can you reconcile this against the Amazon India report?\",\n  \"attachments\": [\n    { \"name\": \"june-statement.png\", \"size\": 20480, \"type\": \"image/png\" }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/me/tickets",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "me", "tickets"]
+            },
+            "description": "Creates a ticket. Category and priority are assigned by the API (AI, falling back to deterministic rules) — the client never sends them."
+          }
+        },
+        {
+          "name": "Get Ticket",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('internal notes and AI drafts are never exposed to authors', function () {",
+                  "  const json = pm.response.json();",
+                  "  const ticket = json.data.ticket;",
+                  "  pm.expect(ticket.aiDraft).to.be.null;",
+                  "  ticket.messages.forEach(function (m) { pm.expect(m.visibility).to.eql('public'); });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/me/tickets/{{ticketId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "me", "tickets", "{{ticketId}}"]
+            },
+            "description": "One ticket, scoped to the caller. Another author's ticket is 404, not 403."
+          }
+        },
+        {
+          "name": "Add Author Follow-up",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', function () { pm.response.to.have.status(201); });",
+                  "pm.test('replying to a resolved ticket reopens it', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(['Open', 'In Progress']).to.include(json.data.ticket.status);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Following up — this is still unresolved on my July statement too.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/me/tickets/{{ticketId}}/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "me", "tickets", "{{ticketId}}", "messages"]
+            },
+            "description": "Appends a public message. Reopens the ticket if it was Resolved or Closed."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin (role: admin)",
+      "item": [
+        {
+          "name": "Queue (urgency sort)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('urgency order puts unresolved, high-priority, older work first', function () {",
+                  "  const items = pm.response.json().data.items;",
+                  "  const rank = { 'Open': 0, 'In Progress': 0, 'Resolved': 1, 'Closed': 1 };",
+                  "  const prank = { Critical: 0, High: 1, Medium: 2, Low: 3 };",
+                  "  for (let i = 1; i < items.length; i++) {",
+                  "    const a = items[i - 1], b = items[i];",
+                  "    const ka = [rank[a.status], prank[a.priority]].join('-');",
+                  "    const kb = [rank[b.status], prank[b.priority]].join('-');",
+                  "    pm.expect(ka <= kb).to.be.true;",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/tickets?sort=urgency&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "tickets"],
+              "query": [
+                { "key": "sort", "value": "urgency" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "status", "value": "Open", "disabled": true },
+                { "key": "category", "value": "Royalty & Payments", "disabled": true },
+                { "key": "priority", "value": "Critical", "disabled": true },
+                { "key": "assignedTo", "value": "me", "disabled": true },
+                { "key": "from", "value": "2026-10-01", "disabled": true },
+                { "key": "to", "value": "2026-10-29", "disabled": true },
+                { "key": "q", "value": "royalty", "disabled": true }
+              ]
+            },
+            "description": "The support queue. Filtering, sorting and pagination are all done in a single MongoDB aggregation.\n\n`sort=urgency` ranks status first (unresolved above resolved), then priority (Critical → Low), then oldest first."
+          }
+        },
+        {
+          "name": "Ticket Detail",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('admins see the full thread including internal notes', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data.ticket).to.have.property('messages');",
+                  "  pm.expect(json.data.ticket).to.have.property('events');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/tickets/{{ticketId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "tickets", "{{ticketId}}"]
+            },
+            "description": "Full ticket, internal notes, audit trail, and `aiDraft`. If no draft is cached yet, one is generated on this request and the response `meta.draftGenerated` is `true`."
+          }
+        },
+        {
+          "name": "Update Ticket (triage)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "",
+                  "const ticket = pm.response.json().data.ticket;",
+                  "",
+                  "pm.test('an admin override is recorded as such', function () {",
+                  "  pm.expect(ticket.prioritySource).to.eql('admin');",
+                  "});",
+                  "",
+                  "pm.test(\"the AI's original verdict is preserved\", function () {",
+                  "  pm.expect(ticket.aiOriginal).to.not.be.null;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"In Progress\",\n  \"priority\": \"Critical\",\n  \"category\": \"Printing & Quality\",\n  \"assignSelf\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/tickets/{{ticketId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "tickets", "{{ticketId}}"]
+            },
+            "description": "Partial update. Overriding category or priority preserves `aiOriginal` and sets the source to `admin`. Every change appends an audit event."
+          }
+        },
+        {
+          "name": "Update Ticket (reopen a closed ticket)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('200 OK', function () { pm.response.to.have.status(200); });"]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Open\",\n  \"reopen\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/tickets/{{ticketId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "tickets", "{{ticketId}}"]
+            },
+            "description": "Closed is terminal. Without `reopen: true` an out-of-Closed transition answers **409 CONFLICT** — try the same body with `reopen` removed to see it."
+          }
+        },
+        {
+          "name": "Reply to Author",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', function () { pm.response.to.have.status(201); });",
+                  "pm.test('public reply is visible in the thread', function () {",
+                  "  const messages = pm.response.json().data.ticket.messages;",
+                  "  const last = messages[messages.length - 1];",
+                  "  pm.expect(last.visibility).to.eql('public');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Hi Priya, I've reconciled June against the Amazon India report — the 12 copies were a delayed settlement, paid out on 4 July.\",\n  \"visibility\": \"public\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/tickets/{{ticketId}}/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "tickets", "{{ticketId}}", "messages"]
+            },
+            "description": "A public reply becomes visible to the author on their next poll."
+          }
+        },
+        {
+          "name": "Add Internal Note",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', function () { pm.response.to.have.status(201); });",
+                  "pm.test('the note is flagged internal', function () {",
+                  "  const messages = pm.response.json().data.ticket.messages;",
+                  "  const last = messages[messages.length - 1];",
+                  "  pm.expect(last.visibility).to.eql('internal');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Escalated to royalty ops; waiting on their reconciliation before we commit to a number.\",\n  \"visibility\": \"internal\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/tickets/{{ticketId}}/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "tickets", "{{ticketId}}", "messages"]
+            },
+            "description": "Internal notes are filtered out of every `/api/me/*` response."
+          }
+        },
+        {
+          "name": "AI — Regenerate Draft",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('a draft came back, from a model or from the rule engine', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data.draft).to.have.property('body');",
+                  "  pm.expect(json.data.draft.body.length).to.be.above(40);",
+                  "  pm.expect(json.data.draft).to.have.property('fallback');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"draft\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/tickets/{{ticketId}}/ai",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "tickets", "{{ticketId}}", "ai"]
+            },
+            "description": "Regenerates the suggested reply. Rate limited per admin; falls back to the template engine rather than failing."
+          }
+        },
+        {
+          "name": "AI — Re-run Classification",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('classification and the applied flag are returned', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data.classification).to.have.property('category');",
+                  "  pm.expect(json.data).to.have.property('applied');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"classify\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/tickets/{{ticketId}}/ai",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "tickets", "{{ticketId}}", "ai"]
+            },
+            "description": "Re-runs classification. `applied: false` means an admin had already overridden the field and the machine result was deliberately not written."
+          }
+        },
+        {
+          "name": "Stats",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('counts are grouped', function () {",
+                  "  const stats = pm.response.json().data.stats;",
+                  "  pm.expect(stats).to.include.keys('total', 'unassigned', 'byStatus', 'byCategory', 'byPriority');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "stats"]
+            },
+            "description": "Queue counts by status, category and priority."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Negative cases",
+      "item": [
+        {
+          "name": "Unauthenticated → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 with the standard error envelope', function () {",
+                  "  pm.response.to.have.status(401);",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.error.code).to.eql('UNAUTHENTICATED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "bookleaf_session=",
+                "description": "Explicitly blank so this request runs unauthenticated"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "stats"]
+            },
+            "description": "Proves the guard rejects a request with no session."
+          }
+        },
+        {
+          "name": "Validation failure → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 VALIDATION_ERROR with field details', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"hi\",\n  \"description\": \"too short\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/me/tickets",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "me", "tickets"]
+            },
+            "description": "Subject under 3 chars and description under 10 chars. Run this with an author session."
+          }
+        },
+        {
+          "name": "Author reaching admin routes → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 FORBIDDEN for the wrong role', function () {",
+                  "  pm.response.to.have.status(403);",
+                  "  pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/tickets",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "tickets"]
+            },
+            "description": "Sign in as the author account, then run this: authenticated, but not an admin."
+          }
+        },
+        {
+          "name": "Unknown ticket → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 rather than 403 — no existence leak', function () {",
+                  "  pm.response.to.have.status(404);",
+                  "  pm.expect(pm.response.json().error.code).to.eql('NOT_FOUND');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/me/tickets/TK-999999",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "me", "tickets", "TK-999999"]
+            },
+            "description": "A ticket that does not exist — or belongs to somebody else. Same answer to both."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,26 +1,233 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+/* ------------------------------------------------------------------ *
+ * Design tokens — Premium Utilitarian Minimalism
+ * Warm monochrome canvas, hairline borders, off-black ink,
+ * muted pastel accents used only for semantic meaning.
+ * ------------------------------------------------------------------ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-newsreader);
+
+  /* Surfaces */
+  --color-canvas: #fbfbfa;
+  --color-surface: #ffffff;
+  --color-sunken: #f7f6f3;
+
+  /* Lines (hairlines only) */
+  --color-line: #eaeaea;
+  --color-line-strong: #dedcd8;
+
+  /* Ink */
+  --color-ink: #111111;
+  --color-ink-soft: #2f3437;
+  --color-muted: #787774;
+  --color-faint: #a5a3a0;
+
+  /* Semantic accents (desaturated pastels) */
+  --color-danger-bg: #fdebec;
+  --color-danger-fg: #9f2f2d;
+  --color-info-bg: #e1f3fe;
+  --color-info-fg: #1f6c9f;
+  --color-success-bg: #edf3ec;
+  --color-success-fg: #346538;
+  --color-warn-bg: #fbf3db;
+  --color-warn-fg: #956400;
+  --color-neutral-bg: #f1f0ee;
+  --color-neutral-fg: #57534e;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Editorial display type for page titles & large numerals */
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+/* Default focus ring — quiet, consistent */
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: #edf3ec;
+  color: var(--color-ink);
+}
+
+/* Thin, unobtrusive scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+
+@layer components {
+  /* Hairline card: 1px solid line, crisp radius, no shadow */
+  .card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: 10px;
+  }
+
+  .hairline-t {
+    border-top: 1px solid var(--color-line);
+  }
+  .hairline-b {
+    border-bottom: 1px solid var(--color-line);
+  }
+
+  /* Buttons — 4px radius, no shadow, 150ms colour shift */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 2.25rem;
+    padding-inline: 0.875rem;
+    border-radius: 5px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    letter-spacing: -0.005em;
+    border: 1px solid transparent;
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease,
+      transform 120ms ease;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn:active {
+    transform: scale(0.985);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background: var(--color-ink);
+    color: #ffffff;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: #333333;
+  }
+
+  .btn-secondary {
+    background: var(--color-surface);
+    color: var(--color-ink);
+    border-color: var(--color-line-strong);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--color-sunken);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--color-muted);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--color-sunken);
+    color: var(--color-ink);
+  }
+
+  /* Inputs — hairline, quiet focus */
+  .field {
+    width: 100%;
+    height: 2.25rem;
+    padding-inline: 0.75rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-line-strong);
+    border-radius: 6px;
+    font-size: 0.875rem;
+    color: var(--color-ink);
+    transition: border-color 150ms ease;
+  }
+  .field::placeholder {
+    color: var(--color-faint);
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--color-ink);
+  }
+  textarea.field {
+    height: auto;
+    padding-block: 0.625rem;
+    line-height: 1.55;
+    resize: vertical;
+  }
+  select.field {
+    appearance: none;
+    padding-right: 2rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23787774' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.7rem center;
+  }
+
+  .label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--color-muted);
+    margin-bottom: 0.375rem;
+  }
+
+  /* Status / priority chips — pill, uppercase, wide tracking, pastel */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 9999px;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  /* Subtle entry motion — 180ms, transform + opacity only */
+  .rise {
+    animation: rise 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }
