@@ -1007,7 +1007,7 @@ components:
           type: string
         model:
           type: string
-          example: google/gemini-2.0-flash-exp:free
+          example: cohere/north-mini-code:free
         generatedAt:
           type: string
           format: date-time

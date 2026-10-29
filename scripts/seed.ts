@@ -129,7 +129,7 @@ async function main() {
           joined_date: author.joined_date ? new Date(author.joined_date) : null,
         },
       },
-      { upsert: true, new: true },
+      { upsert: true },
     );
 
     for (const book of author.books) {
@@ -158,7 +158,7 @@ async function main() {
               : null,
           },
         },
-        { upsert: true, new: true },
+        { upsert: true },
       );
     }
   }
@@ -177,7 +177,7 @@ async function main() {
         authorId: null,
       },
     },
-    { upsert: true, new: true },
+    { upsert: true },
   );
 
   for (const author of data.authors) {
@@ -193,20 +193,26 @@ async function main() {
           authorId: author.author_id,
         },
       },
-      { upsert: true, new: true },
+      { upsert: true },
     );
   }
 
   // --- Counters ------------------------------------------------------------
-  // Only reset on --fresh, otherwise we would hand out duplicate ticket IDs.
-  if (FRESH) {
-    await Counter.findOneAndUpdate(
-      { _id: TICKET_COUNTER },
-      { $set: { seq: TICKET_SEQ_START } },
-      { upsert: true },
-    );
-    log(`Counter "${TICKET_COUNTER}" reset → next ticket is TK-${TICKET_SEQ_START + 1}.`);
-  }
+  // Ensure the counter exists so the very first ticket is TK-1001, matching the
+  // API docs and the Postman collection. `$setOnInsert` makes this a no-op when
+  // the counter is already present, so re-seeding never rewinds the sequence
+  // (which would hand out duplicate ticket IDs). Only `--fresh` — which clears
+  // the Counter collection above — starts the sequence over.
+  const counter = await Counter.findOneAndUpdate(
+    { _id: TICKET_COUNTER },
+    { $setOnInsert: { seq: TICKET_SEQ_START } },
+    { upsert: true, returnDocument: "after" },
+  ).lean();
+  log(
+    `Counter "${TICKET_COUNTER}" = ${counter?.seq} → next ticket is TK-${
+      (counter?.seq ?? TICKET_SEQ_START) + 1
+    }.`,
+  );
 
   // --- Verify --------------------------------------------------------------
   const [authorCount, bookCount, userCount] = await Promise.all([

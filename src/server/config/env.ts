@@ -16,7 +16,7 @@ const envSchema = z.object({
   // --- AI (OpenRouter — an OpenAI-compatible gateway to many models) ---
   OPENROUTER_API_KEY: z.string().optional().default(""),
   /** Any OpenRouter model id; the `:free` suffix targets the free tier. */
-  OPENROUTER_MODEL: z.string().default("google/gemini-2.0-flash-exp:free"),
+  OPENROUTER_MODEL: z.string().default("cohere/north-mini-code:free"),
   OPENROUTER_BASE_URL: z.string().default("https://openrouter.ai/api/v1"),
   AI_ENABLED: z
     .string()
