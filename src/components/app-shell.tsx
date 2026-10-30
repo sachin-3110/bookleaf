@@ -50,10 +50,7 @@ export function AppShell({ user, section, nav, children }: AppShellProps) {
       <header className="hairline-b sticky top-0 z-10 bg-canvas/85 backdrop-blur-sm">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-4 px-6">
           <div className="flex items-baseline gap-2.5">
-            <span className="font-display text-[15px] tracking-tight">BookLeaf</span>
-            <span className="text-[10px] uppercase tracking-[0.16em] text-faint">
-              {section}
-            </span>
+            <Link href="/" className="font-display text-[15px] tracking-tight">BookLeaf</Link>
           </div>
 
           <nav className="ml-6 hidden items-center gap-1 sm:flex">

@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BookLeaf — API Reference</title>
+<style>
+  :root{
+    --canvas:#fbfbfa; --surface:#ffffff; --line:#eaeaea; --line-strong:#d6d6d3;
+    --ink:#111111; --ink-soft:#2b2b2b; --muted:#6b6b68; --faint:#9a9a96;
+    --code-bg:#f7f7f5; --code-inline:#f1f1ef;
+    --get:#2f6f5e; --post:#3a6ea5; --patch:#8a6a2f; --put:#6a5aa8; --delete:#a54a3a;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--canvas); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:14px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:880px; margin:0 auto; padding:0 24px}
+  code,pre{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+  a{color:var(--ink); text-decoration:none}
+  a:hover{text-decoration:underline; text-underline-offset:2px}
+
+  .masthead{border-bottom:1px solid var(--line); background:var(--surface); padding:56px 0 32px}
+  .brand{font-size:14px; font-weight:600; letter-spacing:-0.01em}
+  .brand .tag{
+    font-size:10px; text-transform:uppercase; letter-spacing:.16em; color:var(--faint);
+    margin-left:8px; font-weight:500;
+  }
+  h1{font-size:30px; letter-spacing:-0.02em; font-weight:600; margin:20px 0 0}
+  .lede{color:var(--muted); max-width:64ch; font-size:14px; margin:12px 0 0}
+  .chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:20px}
+  .chip{
+    display:inline-flex; align-items:center; font-size:11px; color:var(--muted);
+    border:1px solid var(--line-strong); border-radius:999px; padding:3px 10px;
+    background:var(--canvas); white-space:nowrap;
+  }
+
+  .toc{border-bottom:1px solid var(--line); padding:14px 0; display:flex; flex-wrap:wrap; gap:6px 18px}
+  .toc a{font-size:12.5px; color:var(--muted); transition:color 140ms ease}
+  .toc a:hover{color:var(--ink); text-decoration:none}
+  .toc-count{
+    display:inline-block; margin-left:6px; font-size:10.5px; color:var(--faint);
+    border:1px solid var(--line); border-radius:999px; padding:0 6px; line-height:16px;
+  }
+
+  main{padding-bottom:24px}
+  .intro{margin-top:36px; max-width:70ch}
+  .intro p{margin:0 0 12px}
+  .intro ol{margin:0 0 12px; padding-left:20px}
+  .intro li{margin:4px 0}
+  .intro ul{margin:6px 0; padding-left:20px}
+
+  h4{
+    font-size:11px; text-transform:uppercase; letter-spacing:.12em; color:var(--faint);
+    font-weight:600; margin:18px 0 6px;
+  }
+  .muted{color:var(--faint); font-weight:400; text-transform:none; letter-spacing:0}
+
+  .group{margin-top:52px}
+  .group-head{display:flex; align-items:center; gap:12px; padding-bottom:12px; border-bottom:1px solid var(--line-strong)}
+  .group-head h2{font-size:16px; letter-spacing:-0.01em; font-weight:600; margin:0}
+
+  .req{padding:22px 0; border-bottom:1px solid var(--line)}
+  .req-head{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
+  .req-head h3{font-size:15px; font-weight:600; margin:0; letter-spacing:-0.01em}
+  .method{
+    font-size:11px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+    border:1px solid currentColor; border-radius:4px; padding:2px 7px; line-height:1.5;
+  }
+  .method.get{color:var(--get)} .method.post{color:var(--post)}
+  .method.patch{color:var(--patch)} .method.put{color:var(--put)}
+  .method.delete{color:var(--delete)}
+
+  .url{
+    margin:12px 0; background:var(--code-bg); border:1px solid var(--line); border-radius:6px;
+    padding:8px 11px; overflow-x:auto;
+  }
+  .url code{font-size:12.5px; color:var(--ink-soft); white-space:pre}
+
+  p{margin:0 0 10px}
+  .req p{color:var(--muted); max-width:72ch}
+  .req p code, .intro code{
+    background:var(--code-inline); border:1px solid var(--line); border-radius:3px;
+    padding:1px 4px; font-size:12.5px; color:var(--ink-soft);
+  }
+
+  .tablewrap{overflow-x:auto}
+  table.kv{width:100%; border-collapse:collapse; font-size:12.5px}
+  table.kv th,table.kv td{
+    text-align:left; padding:7px 10px; border:1px solid var(--line); vertical-align:top;
+  }
+  table.kv th{
+    background:var(--code-bg); color:var(--muted); font-weight:600; font-size:10.5px;
+    text-transform:uppercase; letter-spacing:.08em; white-space:nowrap;
+  }
+  table.kv td code{background:none; border:0; padding:0; font-size:12.5px; color:var(--ink-soft)}
+
+  pre.code{
+    background:var(--code-bg); border:1px solid var(--line); border-radius:6px;
+    padding:12px 14px; overflow-x:auto; margin:0; font-size:12px; line-height:1.55;
+    color:var(--ink-soft);
+  }
+
+  details.tests{margin-top:14px}
+  details.tests summary{
+    font-size:12px; color:var(--muted); cursor:pointer; list-style:none;
+    display:inline-flex; align-items:center; gap:7px; user-select:none;
+    transition:color 140ms ease;
+  }
+  details.tests summary::-webkit-details-marker{display:none}
+  details.tests summary::before{
+    content:"+"; display:inline-block; width:12px; text-align:center;
+    color:var(--faint); transition:transform 140ms ease; font-weight:600;
+  }
+  details.tests[open] summary::before{content:"\2212"}
+  details.tests summary:hover{color:var(--ink)}
+  details.tests pre.code{margin-top:10px}
+
+  footer{margin:64px 0 56px; padding-top:16px; border-top:1px solid var(--line); color:var(--faint); font-size:12px}
+  footer a{color:var(--muted)}
+
+  @media print{
+    body{background:#fff}
+    .toc{display:none}
+    .req{break-inside:avoid}
+    details.tests{display:none}
+  }
+</style>
+</head>
+<body>
+<header class="masthead">
+  <div class="wrap">
+    <div class="brand">BookLeaf<span class="tag">Author Support Portal</span></div>
+    <h1>API Reference</h1>
+    <p class="lede">
+      Every endpoint in the REST API, grouped the way the Postman collection is organised.
+      Generated from <code>docs/postman/bookleaf.postman_collection.json</code>, so this
+      document and the collection cannot drift apart.
+    </p>
+    <div class="chips">
+      <span class="chip">4 groups</span>
+      <span class="chip">21 requests</span>
+      <span class="chip">Cookie session auth</span>
+      <span class="chip">Role-based access</span>
+    </div>
+  </div>
+</header>
+
+<nav class="wrap toc"><a href="#group-1">Auth<span class="toc-count">3</span></a><a href="#group-2">Author (role: author)<span class="toc-count">5</span></a><a href="#group-3">Admin (role: admin)<span class="toc-count">9</span></a><a href="#group-4">Negative cases<span class="toc-count">4</span></a></nav>
+
+<main class="wrap">
+  <div class="intro">
+    <h4 style="margin-top:28px">How to use the collection</h4>
+    <ol>
+      <li>Set the <code>baseUrl</code> collection variable (defaults to <code>http://localhost:3000</code>).</li>
+      <li>Run <strong>Auth → Login</strong> first. The session is an <code>httpOnly</code> cookie, so Postman stores it in its cookie jar automatically — there is no token to copy.</li>
+      <li>Requests in <strong>Author</strong> and <strong>Admin</strong> need a session with the matching role:
+        <ul>
+          <li>admin — <code>admin@bookleaf.test</code> / <code>bookleaf123</code></li>
+          <li>author — <code>priya.sharma@email.com</code> / <code>bookleaf123</code></li>
+        </ul>
+      </li>
+    </ol>
+    <p>
+      <strong>Create Ticket</strong> writes the new <code>ticketId</code> into the
+      <code>ticketId</code> collection variable, so every ticket-scoped request works straight
+      after it.
+    </p>
+    <h4>Collection variables</h4>
+    <div class="tablewrap"><table class="kv"><thead><tr><th>Variable</th><th>Default</th></tr></thead><tbody><tr><td><code>{{baseUrl}}</code></td><td>http://localhost:3000</td></tr><tr><td><code>{{ticketId}}</code></td><td>TK-1001</td></tr></tbody></table></div>
+    <h4>Session &amp; errors</h4>
+    <p>
+      Authentication is a signed JWT in an <code>httpOnly</code> cookie named
+      <code>bookleaf_session</code> — never a bearer token, so identity is taken from the
+      cookie and never from the request body. Failures use a single envelope:
+      <code>{ error: { code, message } }</code>.
+    </p>
+  </div>
+
+  
+<section class="group" id="group-1">
+  <div class="group-head">
+    <h2>Auth</h2>
+    <span class="chip">3 requests</span>
+  </div>
+  
+<article class="req" id="req-1">
+  <div class="req-head">
+    <span class="method post">POST</span>
+    <h3>Login</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/auth/login</code></div>
+  <p>Signs in and sets the <code>bookleaf_session</code> httpOnly cookie. Swap the credentials for the author account to exercise the <code>/api/me/*</code> routes.</p>
+  <h4>Headers</h4><div class="tablewrap"><table class="kv"><thead><tr><th>Header</th><th>Value</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td>application/json</td></tr></tbody></table></div>
+  
+  <h4>Body <span class="muted">(raw)</span></h4><pre class="code"><code>{
+  "email": "admin@bookleaf.test",
+  "password": "bookleaf123"
+}</code></pre>
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('200 OK — signed in', function () {
+  pm.response.to.have.status(200);
+});
+
+pm.test('response carries the user, never a password hash', function () {
+  const json = pm.response.json();
+  pm.expect(json.data.user).to.have.property('role');
+  pm.expect(JSON.stringify(json)).to.not.include('passwordHash');
+});</code></pre></details>
+</article>
+<article class="req" id="req-2">
+  <div class="req-head">
+    <span class="method get">GET</span>
+    <h3>Me</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/auth/me</code></div>
+  <p>Confirms the session is live and returns the caller's role.</p>
+  
+  
+  
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('200 OK', function () { pm.response.to.have.status(200); });</code></pre></details>
+</article>
+<article class="req" id="req-3">
+  <div class="req-head">
+    <span class="method post">POST</span>
+    <h3>Logout</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/auth/logout</code></div>
+  <p>Clears the session cookie. Idempotent.</p>
+  
+  
+  
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('200 OK', function () { pm.response.to.have.status(200); });</code></pre></details>
+</article>
+</section>
+<section class="group" id="group-2">
+  <div class="group-head">
+    <h2>Author (role: author)</h2>
+    <span class="chip">5 requests</span>
+  </div>
+  
+<article class="req" id="req-4">
+  <div class="req-head">
+    <span class="method get">GET</span>
+    <h3>My Books</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/me/books</code></div>
+  <p>Books plus royalty totals. Totals count published titles only.</p>
+  
+  
+  
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('200 OK', function () { pm.response.to.have.status(200); });
+pm.test('totals are returned alongside books', function () {
+  const json = pm.response.json();
+  pm.expect(json.data).to.have.all.keys('books', 'totals');
+});</code></pre></details>
+</article>
+<article class="req" id="req-5">
+  <div class="req-head">
+    <span class="method get">GET</span>
+    <h3>My Tickets</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/me/tickets?page=1&amp;limit=20</code></div>
+  <p>The author's tickets, newest activity first. Public messages only.</p>
+  
+  <h4>Query parameters</h4><div class="tablewrap"><table class="kv"><thead><tr><th>Name</th><th>Example</th><th>Notes</th></tr></thead><tbody><tr><td><code>page</code></td><td>1</td><td></td></tr><tr><td><code>limit</code></td><td>20</td><td></td></tr><tr><td><code>status</code> <span class="muted">(disabled)</span></td><td></td><td>Open | In Progress | Resolved | Closed — leave blank for all</td></tr></tbody></table></div>
+  
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('200 OK', function () { pm.response.to.have.status(200); });
+pm.test('paginated envelope', function () {
+  const json = pm.response.json();
+  pm.expect(json.meta).to.include.keys('page', 'limit', 'total');
+});</code></pre></details>
+</article>
+<article class="req" id="req-6">
+  <div class="req-head">
+    <span class="method post">POST</span>
+    <h3>Create Ticket</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/me/tickets</code></div>
+  <p>Creates a ticket. Category and priority are assigned by the API (AI, falling back to deterministic rules) — the client never sends them.</p>
+  <h4>Headers</h4><div class="tablewrap"><table class="kv"><thead><tr><th>Header</th><th>Value</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td>application/json</td></tr></tbody></table></div>
+  
+  <h4>Body <span class="muted">(raw)</span></h4><pre class="code"><code>{
+  "book_id": "BK001",
+  "subject": "Royalty for June looks short",
+  "description": "My June statement shows 12 fewer copies than the dashboard. Can you reconcile this against the Amazon India report?",
+  "attachments": [
+    { "name": "june-statement.png", "size": 20480, "type": "image/png" }
+  ]
+}</code></pre>
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('201 Created', function () { pm.response.to.have.status(201); });
+
+const json = pm.response.json();
+const ticket = json &amp;&amp; json.data &amp;&amp; json.data.ticket;
+
+if (ticket &amp;&amp; ticket.ticketId) {
+  pm.collectionVariables.set('ticketId', ticket.ticketId);
+  console.log('Captured ticketId:', ticket.ticketId);
+}
+
+pm.test('the API assigned a category and a priority', function () {
+  pm.expect(ticket.category).to.be.a('string');
+  pm.expect(ticket.priority).to.be.a('string');
+  pm.expect(['ai', 'rule', 'default']).to.include(ticket.categorySource);
+});</code></pre></details>
+</article>
+<article class="req" id="req-7">
+  <div class="req-head">
+    <span class="method get">GET</span>
+    <h3>Get Ticket</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/me/tickets/{{ticketId}}</code></div>
+  <p>One ticket, scoped to the caller. Another author's ticket is 404, not 403.</p>
+  
+  
+  
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('200 OK', function () { pm.response.to.have.status(200); });
+pm.test('internal notes and AI drafts are never exposed to authors', function () {
+  const json = pm.response.json();
+  const ticket = json.data.ticket;
+  pm.expect(ticket.aiDraft).to.be.null;
+  ticket.messages.forEach(function (m) { pm.expect(m.visibility).to.eql('public'); });
+});</code></pre></details>
+</article>
+<article class="req" id="req-8">
+  <div class="req-head">
+    <span class="method post">POST</span>
+    <h3>Add Author Follow-up</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/me/tickets/{{ticketId}}/messages</code></div>
+  <p>Appends a public message. Reopens the ticket if it was Resolved or Closed.</p>
+  <h4>Headers</h4><div class="tablewrap"><table class="kv"><thead><tr><th>Header</th><th>Value</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td>application/json</td></tr></tbody></table></div>
+  
+  <h4>Body <span class="muted">(raw)</span></h4><pre class="code"><code>{
+  "body": "Following up — this is still unresolved on my July statement too."
+}</code></pre>
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('201 Created', function () { pm.response.to.have.status(201); });
+pm.test('replying to a resolved ticket reopens it', function () {
+  const json = pm.response.json();
+  pm.expect(['Open', 'In Progress']).to.include(json.data.ticket.status);
+});</code></pre></details>
+</article>
+</section>
+<section class="group" id="group-3">
+  <div class="group-head">
+    <h2>Admin (role: admin)</h2>
+    <span class="chip">9 requests</span>
+  </div>
+  
+<article class="req" id="req-9">
+  <div class="req-head">
+    <span class="method get">GET</span>
+    <h3>Queue (urgency sort)</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/admin/tickets?sort=urgency&amp;page=1&amp;limit=20</code></div>
+  <p>The support queue. Filtering, sorting and pagination are all done in a single MongoDB aggregation.</p><p><code>sort=urgency</code> ranks status first (unresolved above resolved), then priority (Critical → Low), then oldest first.</p>
+  
+  <h4>Query parameters</h4><div class="tablewrap"><table class="kv"><thead><tr><th>Name</th><th>Example</th><th>Notes</th></tr></thead><tbody><tr><td><code>sort</code></td><td>urgency</td><td></td></tr><tr><td><code>page</code></td><td>1</td><td></td></tr><tr><td><code>limit</code></td><td>20</td><td></td></tr><tr><td><code>status</code> <span class="muted">(disabled)</span></td><td>Open</td><td></td></tr><tr><td><code>category</code> <span class="muted">(disabled)</span></td><td>Royalty &amp; Payments</td><td></td></tr><tr><td><code>priority</code> <span class="muted">(disabled)</span></td><td>Critical</td><td></td></tr><tr><td><code>assignedTo</code> <span class="muted">(disabled)</span></td><td>me</td><td></td></tr><tr><td><code>from</code> <span class="muted">(disabled)</span></td><td>2026-10-01</td><td></td></tr><tr><td><code>to</code> <span class="muted">(disabled)</span></td><td>2026-10-29</td><td></td></tr><tr><td><code>q</code> <span class="muted">(disabled)</span></td><td>royalty</td><td></td></tr></tbody></table></div>
+  
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('200 OK', function () { pm.response.to.have.status(200); });
+pm.test('urgency order puts unresolved, high-priority, older work first', function () {
+  const items = pm.response.json().data.items;
+  const rank = { 'Open': 0, 'In Progress': 0, 'Resolved': 1, 'Closed': 1 };
+  const prank = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+  for (let i = 1; i &lt; items.length; i++) {
+    const a = items[i - 1], b = items[i];
+    const ka = [rank[a.status], prank[a.priority]].join('-');
+    const kb = [rank[b.status], prank[b.priority]].join('-');
+    pm.expect(ka &lt;= kb).to.be.true;
+  }
+});</code></pre></details>
+</article>
+<article class="req" id="req-10">
+  <div class="req-head">
+    <span class="method get">GET</span>
+    <h3>Ticket Detail</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/admin/tickets/{{ticketId}}</code></div>
+  <p>Full ticket, internal notes, audit trail, and <code>aiDraft</code>. If no draft is cached yet, one is generated on this request and the response <code>meta.draftGenerated</code> is <code>true</code>.</p>
+  
+  
+  
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('200 OK', function () { pm.response.to.have.status(200); });
+pm.test('admins see the full thread including internal notes', function () {
+  const json = pm.response.json();
+  pm.expect(json.data.ticket).to.have.property('messages');
+  pm.expect(json.data.ticket).to.have.property('events');
+});</code></pre></details>
+</article>
+<article class="req" id="req-11">
+  <div class="req-head">
+    <span class="method patch">PATCH</span>
+    <h3>Update Ticket (triage)</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/admin/tickets/{{ticketId}}</code></div>
+  <p>Partial update. Overriding category or priority preserves <code>aiOriginal</code> and sets the source to <code>admin</code>. Every change appends an audit event.</p>
+  <h4>Headers</h4><div class="tablewrap"><table class="kv"><thead><tr><th>Header</th><th>Value</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td>application/json</td></tr></tbody></table></div>
+  
+  <h4>Body <span class="muted">(raw)</span></h4><pre class="code"><code>{
+  "status": "In Progress",
+  "priority": "Critical",
+  "category": "Printing &amp; Quality",
+  "assignSelf": true
+}</code></pre>
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('200 OK', function () { pm.response.to.have.status(200); });
+
+const ticket = pm.response.json().data.ticket;
+
+pm.test('an admin override is recorded as such', function () {
+  pm.expect(ticket.prioritySource).to.eql('admin');
+});
+
+pm.test("the AI's original verdict is preserved", function () {
+  pm.expect(ticket.aiOriginal).to.not.be.null;
+});</code></pre></details>
+</article>
+<article class="req" id="req-12">
+  <div class="req-head">
+    <span class="method patch">PATCH</span>
+    <h3>Update Ticket (reopen a closed ticket)</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/admin/tickets/{{ticketId}}</code></div>
+  <p>Closed is terminal. Without <code>reopen: true</code> an out-of-Closed transition answers <strong>409 CONFLICT</strong> — try the same body with <code>reopen</code> removed to see it.</p>
+  <h4>Headers</h4><div class="tablewrap"><table class="kv"><thead><tr><th>Header</th><th>Value</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td>application/json</td></tr></tbody></table></div>
+  
+  <h4>Body <span class="muted">(raw)</span></h4><pre class="code"><code>{
+  "status": "Open",
+  "reopen": true
+}</code></pre>
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('200 OK', function () { pm.response.to.have.status(200); });</code></pre></details>
+</article>
+<article class="req" id="req-13">
+  <div class="req-head">
+    <span class="method post">POST</span>
+    <h3>Reply to Author</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/admin/tickets/{{ticketId}}/messages</code></div>
+  <p>A public reply becomes visible to the author on their next poll.</p>
+  <h4>Headers</h4><div class="tablewrap"><table class="kv"><thead><tr><th>Header</th><th>Value</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td>application/json</td></tr></tbody></table></div>
+  
+  <h4>Body <span class="muted">(raw)</span></h4><pre class="code"><code>{
+  "body": "Hi Priya, I've reconciled June against the Amazon India report — the 12 copies were a delayed settlement, paid out on 4 July.",
+  "visibility": "public"
+}</code></pre>
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('201 Created', function () { pm.response.to.have.status(201); });
+pm.test('public reply is visible in the thread', function () {
+  const messages = pm.response.json().data.ticket.messages;
+  const last = messages[messages.length - 1];
+  pm.expect(last.visibility).to.eql('public');
+});</code></pre></details>
+</article>
+<article class="req" id="req-14">
+  <div class="req-head">
+    <span class="method post">POST</span>
+    <h3>Add Internal Note</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/admin/tickets/{{ticketId}}/messages</code></div>
+  <p>Internal notes are filtered out of every <code>/api/me/*</code> response.</p>
+  <h4>Headers</h4><div class="tablewrap"><table class="kv"><thead><tr><th>Header</th><th>Value</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td>application/json</td></tr></tbody></table></div>
+  
+  <h4>Body <span class="muted">(raw)</span></h4><pre class="code"><code>{
+  "body": "Escalated to royalty ops; waiting on their reconciliation before we commit to a number.",
+  "visibility": "internal"
+}</code></pre>
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('201 Created', function () { pm.response.to.have.status(201); });
+pm.test('the note is flagged internal', function () {
+  const messages = pm.response.json().data.ticket.messages;
+  const last = messages[messages.length - 1];
+  pm.expect(last.visibility).to.eql('internal');
+});</code></pre></details>
+</article>
+<article class="req" id="req-15">
+  <div class="req-head">
+    <span class="method post">POST</span>
+    <h3>AI — Regenerate Draft</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/admin/tickets/{{ticketId}}/ai</code></div>
+  <p>Regenerates the suggested reply. Rate limited per admin; falls back to the template engine rather than failing.</p>
+  <h4>Headers</h4><div class="tablewrap"><table class="kv"><thead><tr><th>Header</th><th>Value</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td>application/json</td></tr></tbody></table></div>
+  
+  <h4>Body <span class="muted">(raw)</span></h4><pre class="code"><code>{
+  "mode": "draft"
+}</code></pre>
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('200 OK', function () { pm.response.to.have.status(200); });
+pm.test('a draft came back, from a model or from the rule engine', function () {
+  const json = pm.response.json();
+  pm.expect(json.data.draft).to.have.property('body');
+  pm.expect(json.data.draft.body.length).to.be.above(40);
+  pm.expect(json.data.draft).to.have.property('fallback');
+});</code></pre></details>
+</article>
+<article class="req" id="req-16">
+  <div class="req-head">
+    <span class="method post">POST</span>
+    <h3>AI — Re-run Classification</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/admin/tickets/{{ticketId}}/ai</code></div>
+  <p>Re-runs classification. <code>applied: false</code> means an admin had already overridden the field and the machine result was deliberately not written.</p>
+  <h4>Headers</h4><div class="tablewrap"><table class="kv"><thead><tr><th>Header</th><th>Value</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td>application/json</td></tr></tbody></table></div>
+  
+  <h4>Body <span class="muted">(raw)</span></h4><pre class="code"><code>{
+  "mode": "classify"
+}</code></pre>
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('200 OK', function () { pm.response.to.have.status(200); });
+pm.test('classification and the applied flag are returned', function () {
+  const json = pm.response.json();
+  pm.expect(json.data.classification).to.have.property('category');
+  pm.expect(json.data).to.have.property('applied');
+});</code></pre></details>
+</article>
+<article class="req" id="req-17">
+  <div class="req-head">
+    <span class="method get">GET</span>
+    <h3>Stats</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/admin/stats</code></div>
+  <p>Queue counts by status, category and priority.</p>
+  
+  
+  
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('200 OK', function () { pm.response.to.have.status(200); });
+pm.test('counts are grouped', function () {
+  const stats = pm.response.json().data.stats;
+  pm.expect(stats).to.include.keys('total', 'unassigned', 'byStatus', 'byCategory', 'byPriority');
+});</code></pre></details>
+</article>
+</section>
+<section class="group" id="group-4">
+  <div class="group-head">
+    <h2>Negative cases</h2>
+    <span class="chip">4 requests</span>
+  </div>
+  
+<article class="req" id="req-18">
+  <div class="req-head">
+    <span class="method get">GET</span>
+    <h3>Unauthenticated → 401</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/admin/stats</code></div>
+  <p>Proves the guard rejects a request with no session.</p>
+  <h4>Headers</h4><div class="tablewrap"><table class="kv"><thead><tr><th>Header</th><th>Value</th></tr></thead><tbody><tr><td><code>Cookie</code></td><td>bookleaf_session=</td></tr></tbody></table></div>
+  
+  
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('401 with the standard error envelope', function () {
+  pm.response.to.have.status(401);
+  const json = pm.response.json();
+  pm.expect(json.error.code).to.eql('UNAUTHENTICATED');
+});</code></pre></details>
+</article>
+<article class="req" id="req-19">
+  <div class="req-head">
+    <span class="method post">POST</span>
+    <h3>Validation failure → 400</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/me/tickets</code></div>
+  <p>Subject under 3 chars and description under 10 chars. Run this with an author session.</p>
+  <h4>Headers</h4><div class="tablewrap"><table class="kv"><thead><tr><th>Header</th><th>Value</th></tr></thead><tbody><tr><td><code>Content-Type</code></td><td>application/json</td></tr></tbody></table></div>
+  
+  <h4>Body <span class="muted">(raw)</span></h4><pre class="code"><code>{
+  "subject": "hi",
+  "description": "too short"
+}</code></pre>
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('400 VALIDATION_ERROR with field details', function () {
+  pm.response.to.have.status(400);
+  pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR');
+});</code></pre></details>
+</article>
+<article class="req" id="req-20">
+  <div class="req-head">
+    <span class="method get">GET</span>
+    <h3>Author reaching admin routes → 403</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/admin/tickets</code></div>
+  <p>Sign in as the author account, then run this: authenticated, but not an admin.</p>
+  
+  
+  
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('403 FORBIDDEN for the wrong role', function () {
+  pm.response.to.have.status(403);
+  pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN');
+});</code></pre></details>
+</article>
+<article class="req" id="req-21">
+  <div class="req-head">
+    <span class="method get">GET</span>
+    <h3>Unknown ticket → 404</h3>
+  </div>
+  <div class="url"><code>{{baseUrl}}/api/me/tickets/TK-999999</code></div>
+  <p>A ticket that does not exist — or belongs to somebody else. Same answer to both.</p>
+  
+  
+  
+  <details class="tests"><summary>Assertions</summary><pre class="code"><code>pm.test('404 rather than 403 — no existence leak', function () {
+  pm.response.to.have.status(404);
+  pm.expect(pm.response.json().error.code).to.eql('NOT_FOUND');
+});</code></pre></details>
+</article>
+</section>
+</main>
+
+<footer class="wrap">
+  BookLeaf — Author Support Portal · API reference generated from the Postman collection.
+  The same contract is published as OpenAPI 3.1 at <code>/openapi.yaml</code> and rendered at
+  <code>/api-docs</code>.
+</footer>
+</body>
+</html>
